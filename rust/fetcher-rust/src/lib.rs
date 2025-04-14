@@ -50,16 +50,13 @@ pub extern "C" fn rust_fetch(
             let code = res.status();
             let body = res.into_string().unwrap_or_default();
 
-            let is_ok = code < 400;
-
             FetchResult {
-                ok: is_ok,
+                ok: code < 400,
                 code: code.into(),
                 body: CString::new(body).unwrap().into_raw(),
             }
         }
         Err(ureq::Error::Status(code, response)) => {
-            // Здесь у нас есть Response и его body!
             let body = response
                 .into_string()
                 .unwrap_or_else(|_| "<no body>".to_string());
@@ -71,7 +68,6 @@ pub extern "C" fn rust_fetch(
         }
         Err(e) => {
             let msg = format!("Request error: {}", e);
-
             FetchResult {
                 ok: false,
                 code: 0,
