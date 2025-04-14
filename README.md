@@ -33,18 +33,29 @@ npm install react-native-sync-tasks
 ```ts
 import { createTask, SyncTasksManager } from 'react-native-sync-tasks';
 
-const task = createTask<{ response: string }>({
+type TData = {
+  userId: number;
+  id: number;
+  title: string;
+  body: string;
+};
+
+const task = createTask<TData>({
   config: {
     url: 'https://jsonplaceholder.typicode.com/posts/1',
-    interval: 2000,
+    // 2000ms / default 1000ms
+    interval: 2000, 
+    // headers optional
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
   },
+  // { body: TData, status_code: number }
   onData: (data) => {
     console.log('DATA', data);
   },
+   // { error: string, status_code: number }
   onError: (error) => {
     console.log('ERROR', error);
   },
@@ -52,6 +63,12 @@ const task = createTask<{ response: string }>({
 
 SyncTasksManager.addTask(task);
 SyncTasksManager.startAll();
+...
+// stop all tasks
+SyncTasksManager.stopAll();
+// or stop only 1 task
+task.stop()
+
 ```
 
 ---
