@@ -4,6 +4,11 @@ project(rnsynctasks)
 set (CMAKE_VERBOSE_MAKEFILE ON)
 set (CMAKE_CXX_STANDARD 20)
 
+add_library(fetcher STATIC IMPORTED)
+
+set_target_properties(fetcher PROPERTIES IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/main/libs/${ANDROID_ABI}/libfetcher.a")
+
+
 add_library(rnsynctasks   SHARED
              ../cpp/react-native-sync-tasks.cpp
             ../cpp/react-native-sync-tasks.hpp
@@ -13,12 +18,12 @@ add_library(rnsynctasks   SHARED
             ../cpp/JSManager.hpp
             ../cpp/JSManager.cpp
             ../cpp/helpers/helpers.hpp
-            ../cpp/helpers/FetchService.cpp
-            ../cpp/helpers/FetchService.hpp
+            ../cpp/core/TaskScheduler.hpp
+            ../cpp/fetcher.h
             cpp-adapter.cpp
+
 )
 
-# Specifies a path to native header files.
  include_directories(
              ../cpp
  )
@@ -44,4 +49,5 @@ target_link_libraries(rnsynctasks
         log
         ReactAndroid::reactnative
         fbjni::fbjni
+        fetcher
 )

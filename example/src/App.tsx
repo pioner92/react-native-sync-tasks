@@ -18,7 +18,7 @@ const task = createTask<TData>({
     },
   },
   onData: (data: { body: TData; status_code: number }) => {
-    console.log('DATA 1 ', data.body.id);
+    console.log('DATA 1 ', data.body);
   },
   onError: (error: { error: string; status_code: number }) => {
     console.log('ERROR 1 ', error);

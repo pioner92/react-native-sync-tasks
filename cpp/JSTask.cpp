@@ -7,7 +7,7 @@
 
 #include "JSTask.hpp"
 
-#include "TaskScheduler.hpp"
+#include "core/TaskScheduler.hpp"
 #include "constants.hpp"
 #include "helpers/helpers.hpp"
 #include "iostream"

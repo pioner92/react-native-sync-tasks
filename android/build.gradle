@@ -135,6 +135,9 @@ android {
 
   sourceSets {
     main {
+//      jniLibs.srcDirs = ['main/jniLibs']
+      jniLibs.srcDirs = ['src/main/jniLibs']
+//      jniLibs.srcDirs = ['jniLibs']
       if (isNewArchitectureEnabled()) {
           java.srcDirs += [
             "generated/java",
