@@ -1,6 +1,6 @@
 {
   "name": "react-native-sync-tasks",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JSI-based task manager for React Native that periodically fetches data from a server, deduplicates responses using hashing, and provides centralized task control via native C++ module.",
   "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
