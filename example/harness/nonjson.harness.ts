@@ -15,7 +15,7 @@ describe('non-JSON success responses', () => {
 
     await waitUntil(() => t.data.length >= 1, 5000);
 
-    expect(t.data[0]).toEqual({ body: null, status_code: 204 });
+    expect(t.data[0]).toMatchObject({ body: null, status_code: 204 });
     expect(t.errors).toEqual([]);
   });
 
@@ -24,7 +24,7 @@ describe('non-JSON success responses', () => {
 
     await waitUntil(() => t.errors.length >= 1, 5000);
 
-    expect(t.errors[0]).toEqual({ error: 'not json', status_code: 200 });
+    expect(t.errors[0]).toMatchObject({ error: 'not json', status_code: 200 });
     expect(t.data).toEqual([]);
   });
 });

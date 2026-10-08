@@ -1,178 +1,144 @@
-# 🚀 react-native-sync-tasks
+# react-native-sync-tasks
 
 <p align="center">
 <img src="./assets/img.png" width="700"/>
 </p>
 
-**react-native-sync-tasks** is a JSI library for React Native that runs **periodic HTTP polling on native threads**. You describe tasks in JavaScript; requests, scheduling and response deduplication happen in C++ and the platform HTTP stack, so the JS thread stays free.
+Periodic HTTP polling for React Native that runs **on native threads**. Tasks are described in JavaScript; scheduling, requests and response deduplication happen in C++ and the platform HTTP stack, so the JS thread stays free.
 
-> ⚠️ **Note**: This is not a background task manager — tasks do not continue running when the app is in the background or killed. Polling happens while the app is active, on native threads, outside the JS thread.
+> Polling runs while the app is active. It is not a background task manager.
 
----
+## Features
 
-## ⚙️ Features
+- Native thread pool; the JS thread is never blocked
+- Platform HTTP: `NSURLSession` on iOS, OkHttp on Android, TLS through the system trust store
+- `onData` only when the body changes; conditional requests (ETag / Last-Modified) turn unchanged responses into `304`
+- Timeout, exponential backoff, jitter, immediate first run, concurrency limit
+- Any of `GET` `POST` `PUT` `PATCH` `DELETE`, request body, response headers
+- `stop()` aborts the in-flight request; one task never runs concurrently with itself
 
-- 🔁 Periodic HTTP polling with a configurable interval
-- 🧵 Requests run on a native thread pool — the JS thread is never blocked
-- 🌐 Platform HTTP stacks: `NSURLSession` on iOS, OkHttp on Android — no bundled networking or TLS code
-- 🔒 TLS through the system trust store (Android Network Security Config and iOS ATS apply as usual)
-- ✨ Response deduplication — `onData` is skipped when the body has not changed
-- 🛡️ A slow endpoint never runs concurrently with itself and cannot starve other tasks
-- 🧠 Centralized control: start/stop every task at once
+## Requirements
 
----
+- React Native **0.77+** with the New Architecture (tested on 0.87.1). The legacy architecture (RN 0.77–0.81) has a code path but is not tested yet
+- iOS, Android `minSdkVersion` 24
 
-## 📋 Requirements
-
-- React Native **0.80+** (tested on 0.87.1)
-- New Architecture — the only option since RN 0.82. A legacy-architecture code path for RN 0.80–0.81 is included but has not been tested yet.
-- iOS and Android (`minSdkVersion` 24)
-
----
-
-## 📦 Installation
+## Installation
 
 ```bash
-npm install react-native-sync-tasks
-# or
 yarn add react-native-sync-tasks
+cd ios && pod install
 ```
 
-iOS: run `pod install` in your `ios` folder.
-
----
-
-## 🛠️ Usage
+## Usage
 
 ```ts
 import { createTask, SyncTasksManager } from 'react-native-sync-tasks';
 
-type TData = {
-  userId: number;
-  id: number;
-  title: string;
-  body: string;
-};
-
-const task = createTask<TData>({
+const task = createTask<{ id: number; title: string }>({
   config: {
     url: 'https://jsonplaceholder.typicode.com/posts/1',
-    // optional, default 1000ms
     interval: 2000,
-    // optional, whole-request timeout, default 30000ms
-    timeout: 10000,
-    // optional
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
   },
-  // { body: TData, status_code: number }
-  onData: (data) => {
-    console.log('DATA', data);
-  },
-  // { error: string, status_code: number }
-  onError: (error) => {
-    console.log('ERROR', error);
-  },
+  onData: ({ body, status_code, headers }) => console.log(body.title),
+  onError: ({ error, status_code }) => console.warn(status_code, error),
 });
 
 SyncTasksManager.addTask(task);
 SyncTasksManager.startAll();
-...
-// stop all tasks
-SyncTasksManager.stopAll();
-// or stop only 1 task
-task.stop();
+
+task.stop(); // pause one task
+SyncTasksManager.removeTask(task); // stop and forget it
 ```
 
----
+With more options:
 
-## 🔍 API
+```ts
+createTask({
+  config: {
+    url: 'https://api.example.com/feed',
+    method: 'POST',
+    body: JSON.stringify({ since: 0 }),
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 10000,
+    immediate: true,
+    jitter: 0.1,
+    backoff: { multiplier: 2, maxInterval: 60000 },
+  },
+  onData: (data) => {},
+});
+```
 
-### `createTask<T>(props: CreateTaskParams<T>): Task`
+## API
 
-Creates a task that periodically fetches data from the given URL on a native thread.
+### `createTask<T>({ config, onData, onError? }): Task`
 
-| Name      | Type                                                                   | Description                                 |
-|-----------|------------------------------------------------------------------------|---------------------------------------------|
-| `config`  | `{ url: string; interval?: number; timeout?: number; headers?: Record<string, string> }` | Polling configuration, see below |
-| `onData`  | `(data: { body: T, status_code: number }) => void`                     | Called with the parsed JSON body            |
-| `onError` | `(error: { error: string, status_code: number }) => void`              | Called when a request fails (optional)      |
+Invalid options throw immediately.
 
-`config` fields:
+| `config` field | Default | Description |
+|---|---|---|
+| `url` | — | Endpoint to poll |
+| `interval` | `1000` | Delay between polls, ms |
+| `timeout` | `30000` | Limit for the whole request (connect, wait, read body), ms |
+| `method` | `'GET'` | `GET` `POST` `PUT` `PATCH` `DELETE` |
+| `body` | — | Request body string; not allowed with `GET` |
+| `headers` | — | Request headers |
+| `immediate` | `false` | First request right after the task is added, not after one `interval` |
+| `jitter` | `0` | Random spread of each delay, fraction 0–1 (`0.1` = ±10%) |
+| `backoff` | — | `{ multiplier = 2, maxInterval = max(interval, 60000) }` — after N failures in a row the delay is `interval × multiplierᴺ`, up to `maxInterval`; the next success resets it |
+| `conditional` | `true` | `GET` only: send `If-None-Match` / `If-Modified-Since`; `304` means unchanged |
 
-| Field      | Default | Description |
-|------------|---------|-------------|
-| `url`      | —       | Endpoint to poll (GET). Also the task id: a second task with the same URL is ignored by the manager |
-| `interval` | `1000`  | Time between polls, ms |
-| `timeout`  | `30000` | Limit for the whole request — connecting, waiting and reading the body — ms. Must be a positive number |
-| `headers`  | —       | Request headers |
+`onData` receives `{ body, status_code, headers }`, `onError` receives `{ error, status_code, headers }`. Header names are lowercased. Exported types: `Task`, `TaskConfig`, `TaskData`, `TaskError`, `CreateTaskParams`, `HttpMethod`.
 
 ### `Task`
 
-- `start(): void` — start (or resume) the task; it must be added to the manager first
-- `stop(): void` — stop the task
-- `isRunning(): boolean` — whether the task is currently running
+| Method | Description |
+|---|---|
+| `start()` | Start or resume; the task must be added to the manager first |
+| `stop()` | Stop; the in-flight request is aborted and its result dropped |
+| `isRunning()` | Whether the task is running |
 
 ### `SyncTasksManager`
 
-- `addTask(task: Task): void` — add a single task
-- `addTasks(tasks: Task[]): void` — add multiple tasks
-- `startAll(): void` — start all registered tasks
-- `stopAll(): void` — stop all tasks
+| Method | Description |
+|---|---|
+| `addTask(task)` / `addTasks(tasks)` | Add tasks; adding the same task twice has no effect |
+| `removeTask(task)` | Stop, abort the request and forget the task; it can be added again |
+| `startAll()` | Start every added task, including ones stopped individually |
+| `stopAll()` | Stop every task and abort requests |
+| `setMaxConcurrentRequests(n)` | Requests running at the same time, 1–64 (default 4) |
 
----
+## Request behavior
 
-## 📡 Request behavior
+| Response | Callback |
+|---|---|
+| 2xx/3xx, JSON | `onData` — skipped while the body equals the last delivered one (also after errors in between) |
+| 2xx/3xx, empty (e.g. `204`) | `onData` with `body: null` |
+| 2xx/3xx, not JSON | `onError` with the raw body — once while the body stays the same |
+| `304` | none |
+| 4xx/5xx | `onError` with the raw body — on every poll |
+| Network, TLS, invalid URL, timeout | `onError` with `status_code: 0` and a platform message prefixed `Request error:` |
 
-| Situation | Callback |
-|-----------|----------|
-| 2xx/3xx with a JSON body | `onData({ body, status_code })` — skipped if the body equals the previous one |
-| 2xx/3xx with an empty body (e.g. `204`) | `onData({ body: null, status_code })` |
-| 2xx/3xx with a non-JSON body | `onError({ error: <raw body>, status_code })` — reported once while the body stays the same |
-| 4xx/5xx | `onError({ error: <raw body>, status_code })` — on every poll |
-| Network/TLS error, invalid URL | `onError({ error: 'Request error: …', status_code: 0 })` |
-| Request exceeded `timeout` | `onError({ error: 'Request error: …timed out…', status_code: 0 })` |
+- The next poll is scheduled after the current request finishes, `interval` after it started.
+- Redirects are followed and `gzip` is decoded. No HTTP cache, no cookies.
+- Plain `http://` follows the platform policy: add an ATS exception on iOS and allow cleartext traffic ([Network Security Config](https://developer.android.com/privacy-and-security/security-config)) on Android.
 
-- Redirects are followed, `gzip` responses are decoded.
-- Every poll hits the network: no HTTP cache, no cookies are stored or sent.
-- While a task's request is in flight, its next ticks are skipped — requests of one task never overlap.
-- Error messages after `Request error:` come from the platform (`NSURLSession` / OkHttp) and differ between iOS and Android.
+## Upgrading from 0.1
 
-### Plain `http://` URLs
+- Requires React Native 0.77+.
+- `http://` URLs are subject to ATS / Network Security Config.
+- Error messages come from `NSURLSession` / OkHttp and differ per platform.
+- Non-JSON success responses go to `onError` (they used to be dropped); empty bodies arrive as `body: null`.
+- The URL is no longer the task id: two tasks may poll the same URL.
 
-Requests follow the platform security policies. To poll a plain `http://` endpoint, allow it the same way as for `fetch`:
-
-- **iOS** — add an App Transport Security exception (`NSAppTransportSecurity` in `Info.plist`).
-- **Android** — allow cleartext traffic for the domain via [Network Security Config](https://developer.android.com/privacy-and-security/security-config) (or `android:usesCleartextTraffic`).
-
----
-
-## 🧪 Testing
-
-Unit tests for the JS layer:
+## Development
 
 ```bash
-yarn test
+yarn test                      # JS unit tests
+cd example && yarn harness:ios # on-device tests (also: harness:android)
 ```
 
-Native behavior is covered by [react-native-harness](https://github.com/callstackincubator/react-native-harness) tests in `example/harness` (59 tests: responses, HTTP and transport errors, TLS verification, task lifecycle, threading, timeouts). They run inside the example app against a local mock server and show live progress on the device screen.
+The on-device suite ([react-native-harness](https://github.com/callstackincubator/react-native-harness), `example/harness`) runs against a local mock server and shows progress on screen. Physical-device runners are in `example/rn-harness.config.mjs`; the `external-tls` tests need internet access.
 
-```bash
-cd example
-yarn harness:ios       # iOS simulator
-yarn harness:android   # Android emulator
-```
-
-Other runners (physical devices) are listed in `example/rn-harness.config.mjs`. The CI workflow has Harness jobs for an Android emulator and an iOS simulator. The `external-tls` tests need internet access.
-
----
-
-## 📄 License
+## License
 
 MIT
-
----
-
-🎉 **Enjoy using react-native-sync-tasks!** Offload polling to native threads and keep your JS thread free.

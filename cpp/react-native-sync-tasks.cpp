@@ -24,7 +24,4 @@ void synctasks::install(jsi::Runtime* rt,
 
  runtime.global().setProperty(runtime, CREATE_TASK_KEY,
                               std::move(taskCreator));
-
-  runtime.global().setProperty(runtime, CREATE_TASK_KEY,
-                               std::move(taskCreator));
 }

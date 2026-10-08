@@ -105,7 +105,7 @@
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": ">=0.80.0"
+    "react-native": ">=0.77.0"
   },
   "workspaces": [
     "example"

@@ -15,6 +15,8 @@ const rank = (path) => {
 
 module.exports = class HarnessSequencer extends Sequencer {
   sort(tests) {
-    return [...tests].sort((a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path));
+    return [...tests].sort(
+      (a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path)
+    );
   }
 };

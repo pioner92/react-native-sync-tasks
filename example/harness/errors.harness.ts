@@ -39,7 +39,10 @@ describe('HTTP error responses', () => {
 
     await waitUntil(() => t.errors.length >= 1, 5000);
 
-    expect(t.errors[0]).toEqual({ error: 'plain error 500', status_code: 500 });
+    expect(t.errors[0]).toMatchObject({
+      error: 'plain error 500',
+      status_code: 500,
+    });
   });
 
   it('reports every failed poll', async () => {

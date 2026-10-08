@@ -12,6 +12,12 @@ export const HTTPS_PORT = 8100;
 
 const hits = new Map();
 const lastHeaders = new Map();
+const hitTimes = new Map();
+const aborted = new Map();
+const notModified = new Map();
+const versions = new Map();
+// Concurrent requests per `group` query param: { now, max }.
+const concurrency = new Map();
 // Test progress recorded by mock-server-plugin.mjs, shown by the in-app panel (harness/TestProgress.tsx).
 const report = new Map();
 const runStartedAt = Date.now();
@@ -41,13 +47,43 @@ function handle(req, res) {
   }
 
   if (route === '__hits') {
-    return json(res, 200, { hits: hits.get(key) ?? 0, headers: lastHeaders.get(key) ?? null });
+    return json(res, 200, {
+      hits: hits.get(key) ?? 0,
+      headers: lastHeaders.get(key) ?? null,
+      times: hitTimes.get(key) ?? [],
+      aborted: aborted.get(key) ?? 0,
+      notModified: notModified.get(key) ?? 0,
+    });
+  }
+
+  if (route === '__bump') {
+    versions.set(key, (versions.get(key) ?? 1) + 1);
+    return json(res, 200, { version: versions.get(key) });
+  }
+
+  if (route === '__concurrency') {
+    return json(res, 200, { max: concurrency.get(key)?.max ?? 0 });
   }
 
   const hitKey = `${route}/${key}`;
   hits.set(hitKey, (hits.get(hitKey) ?? 0) + 1);
   lastHeaders.set(hitKey, req.headers);
+  hitTimes.set(hitKey, [...(hitTimes.get(hitKey) ?? []), Date.now()]);
   const n = hits.get(hitKey);
+
+  // A client that drops the connection before the response counts as aborted.
+  res.on('close', () => {
+    if (!res.writableFinished) aborted.set(hitKey, (aborted.get(hitKey) ?? 0) + 1);
+  });
+
+  const group = url.searchParams.get('group');
+  if (group) {
+    const c = concurrency.get(group) ?? { now: 0, max: 0 };
+    c.now += 1;
+    c.max = Math.max(c.max, c.now);
+    concurrency.set(group, c);
+    res.on('close', () => (c.now -= 1));
+  }
 
   switch (route) {
     case 'static':
@@ -55,11 +91,37 @@ function handle(req, res) {
       return json(res, 200, { key, value: 'same' }, { 'Cache-Control': 'public, max-age=3600' });
     case 'counter':
       return json(res, 200, { key, n });
-    case 'echo':
-      return json(res, 200, { key, method: req.method, headers: req.headers, query: Object.fromEntries(url.searchParams) });
+    case 'echo': {
+      let body = '';
+      req.on('data', (chunk) => (body += chunk));
+      req.on('end', () =>
+        json(
+          res,
+          200,
+          { key, method: req.method, headers: req.headers, query: Object.fromEntries(url.searchParams), body },
+          { 'X-Echo-Key': key }
+        )
+      );
+      return;
+    }
+    case 'etag': {
+      const version = versions.get(key) ?? 1;
+      const etag = `"v${version}"`;
+      if (req.headers['if-none-match'] === etag) {
+        notModified.set(hitKey, (notModified.get(hitKey) ?? 0) + 1);
+        res.writeHead(304, { ETag: etag });
+        return res.end();
+      }
+      return json(res, 200, { key, version }, { ETag: etag });
+    }
+    case 'flaky': {
+      // The first `fails` requests fail, the rest succeed.
+      const fails = Number(url.searchParams.get('fails') ?? 1);
+      return n <= fails ? json(res, 500, { n }) : json(res, 200, { key, ok: true });
+    }
     case 'status': {
       const code = Number(rest[0]);
-      return json(res, code, { code, message: `status ${code}` });
+      return json(res, code, { code, message: `status ${code}` }, { 'X-Status-Route': String(code) });
     }
     case 'status-text': {
       const code = Number(rest[0]);
