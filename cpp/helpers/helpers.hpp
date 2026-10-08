@@ -9,11 +9,7 @@
 
 #include "jsi/jsi.h"
 #include "constants.hpp"
-
-
-extern "C" {
-#include "fetcher.h"
-}
+#include "Fetcher.hpp"
 
 template<size_t N>
 inline consteval auto createErrorString(const char(&str)[N]){
@@ -44,13 +40,6 @@ inline bool checkJSType<facebook::jsi::Array>(facebook::jsi::Runtime& rt, const 
   return val.isObject() && val.asObject(rt).isArray(rt);
 };
 
-
-struct CPPHeaderItem {
-  std::string key;
-  std::string value;
-};
-
-using CPPHeaders = std::vector<CPPHeaderItem>;
 
 inline CPPHeaders getFetchHeadersFromJSObject(jsi::Runtime&rt, const jsi::Object& obj){
   CPPHeaders cppHeaders;

@@ -135,15 +135,9 @@ android {
 
   sourceSets {
     main {
-//      jniLibs.srcDirs = ['main/jniLibs']
       jniLibs.srcDirs = ['src/main/jniLibs']
-//      jniLibs.srcDirs = ['jniLibs']
-      if (isNewArchitectureEnabled()) {
-          java.srcDirs += [
-            "generated/java",
-            "generated/jni"
-          ]
-      }
+      // The codegen spec base class only exists on the new architecture.
+      java.srcDirs += [isNewArchitectureEnabled() ? 'src/newarch/java' : 'src/oldarch/java']
     }
   }
 }
@@ -164,8 +158,8 @@ dependencies {
 if (isNewArchitectureEnabled()) {
   react {
     jsRootDir = file("../src/")
-    libraryName = "ConfigJsi"
-    codegenJavaPackageName = "com.configjsi"
+    libraryName = "RNSyncTasksSpec"
+    codegenJavaPackageName = "com.synctasks"
   }
 }
 

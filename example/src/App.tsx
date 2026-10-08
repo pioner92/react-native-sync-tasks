@@ -44,7 +44,7 @@ const task2 = createTask<TData>({
 
 export default function App() {
   const onStart = () => {
-    SyncTasksManager.addTasks([task]);
+    SyncTasksManager.addTasks([task, task2]);
     SyncTasksManager.startAll();
   };
 

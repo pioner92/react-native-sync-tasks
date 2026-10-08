@@ -13,6 +13,9 @@ constexpr const char* CONFIG_KEY = "config";
 constexpr const char* URL_KEY = "url";
 constexpr const char* INTERVAL_KEY = "interval";
 constexpr const char* HEADERS_KEY = "headers";
+constexpr const char* TIMEOUT_KEY = "timeout";
+
+constexpr int DEFAULT_TIMEOUT_MS = 30000;
 constexpr const char* ON_DATA_KEY = "onData";
 constexpr const char* ON_ERROR_KEY = "onError";
 constexpr const char* SYNC_TASK_MANAGER_KEY = "SyncTasksManager";

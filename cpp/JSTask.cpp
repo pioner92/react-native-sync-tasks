@@ -12,13 +12,7 @@
 #include "helpers/helpers.hpp"
 #include "iostream"
 
-extern "C" {
-#include "fetcher.h"
-}
-
 using namespace facebook;
-
-using RustHeader = Header;
 
 constexpr std::hash<std::string> hasher;
 
@@ -45,6 +39,9 @@ jsi::Function createJSTaskCreator(
         CPPHeaders cppHeaders = getFetchHeadersFromJSObject(rt, config);
 
         int interval = config.getProperty(rt, INTERVAL_KEY).asNumber();
+        jsi::Value timeoutValue = config.getProperty(rt, TIMEOUT_KEY);
+        int timeoutMs = timeoutValue.isNumber() ? timeoutValue.asNumber()
+                                                : DEFAULT_TIMEOUT_MS;
         std::string url = config.getProperty(rt, URL_KEY).asString(rt).utf8(rt);
 
         if (!checkJSType<jsi::Function>(rt,
@@ -67,21 +64,11 @@ jsi::Function createJSTaskCreator(
 
         auto task = std::make_shared<Task>(
             url, interval,
-            [url, cppHeaders = std::move(cppHeaders), callInvoker, onData,
+            [url, timeoutMs, cppHeaders = std::move(cppHeaders), callInvoker, onData,
              onError, &rt](Task& self) mutable {
-              std::vector<RustHeader> rustHeaders;
+              FetchResult result = platformFetch(url, cppHeaders, timeoutMs);
 
-              if (cppHeaders.size()) {
-                for (auto& h : cppHeaders) {
-                  rustHeaders.emplace_back(h.key.c_str(), h.value.c_str());
-                }
-              }
-
-              FetchResult result = rust_fetch(url.c_str(), rustHeaders.data(),
-                                              rustHeaders.size());
-
-              std::string body = result.body;
-              rust_free_string(result.body);
+              std::string body = std::move(result.body);
 
               if (result.ok) {
                 size_t bodyHash = hasher(body);
@@ -92,16 +79,33 @@ jsi::Function createJSTaskCreator(
 
                 self.setLastBodyHash(bodyHash);
 
-                callInvoker->invokeAsync([&rt, onData, body = std::move(body),
-                                          statuc_code = result.code] {
+                callInvoker->invokeAsync([&rt, onData, onError,
+                                          body = std::move(body),
+                                          status_code = result.code] {
+                  // An empty body (e.g. 204) is delivered as null.
+                  jsi::Value json = jsi::Value::null();
+
+                  if (!body.empty()) {
+                    try {
+                      json = jsi::Value::createFromJsonUtf8(
+                          rt, reinterpret_cast<const uint8_t*>(body.data()),
+                          body.size());
+                    } catch (const jsi::JSIException&) {
+                      // Not JSON: hand the raw body to onError instead of dropping it.
+                      if (onError) {
+                        jsi::Object error(rt);
+                        error.setProperty(rt, "error",
+                                          jsi::String::createFromUtf8(rt, body));
+                        error.setProperty(rt, "status_code", status_code);
+                        onError->call(rt, error);
+                      }
+                      return;
+                    }
+                  }
+
                   jsi::Object jsRes(rt);
-
-                  jsi::Value json = jsi::Value::createFromJsonUtf8(
-                      rt, reinterpret_cast<const uint8_t*>(body.data()),
-                      body.size());
-
                   jsRes.setProperty(rt, "body", json);
-                  jsRes.setProperty(rt, "status_code", statuc_code);
+                  jsRes.setProperty(rt, "status_code", status_code);
 
                   onData->call(rt, jsRes);
                 });

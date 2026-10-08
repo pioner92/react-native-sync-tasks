@@ -1,4 +1,6 @@
-import { NativeModules } from 'react-native';
+import NativeSyncTasks from './NativeSyncTasks';
+
+const DEFAULT_TIMEOUT_MS = 30000;
 
 type Task = {
   stop: () => void;
@@ -16,7 +18,8 @@ interface ITaskManager {
 type TCreateTaskProps<T> = {
   config: {
     url: string;
-    interval: number; // default 1000 ms
+    interval?: number; // default 1000 ms
+    timeout?: number; // whole request, default 30000 ms
     headers?: Record<string, string>;
   };
   onData: (data: { body: T; status_code: number }) => void;
@@ -29,19 +32,15 @@ declare global {
   var SyncTasksManager: ITaskManager;
 }
 
-// Ссылка на глобальный объект SqlDb
-let __SyncTasksManager = global.SyncTasksManager;
-
-// Автоинициализация
-if (!__SyncTasksManager) {
-  if (NativeModules.SyncTasksManager?.install) {
-    NativeModules.SyncTasksManager.install(); // Вызываем native install метод
-    __SyncTasksManager = global.SyncTasksManager; // Сохраняем глобальную ссылку на объект SqlDb
-    console.log('✅ TaskManager initialized successfully');
-  }
+// Importing NativeSyncTasks creates the module, which installs the bindings on the new architecture.
+if (!global.SyncTasksManager) {
+  NativeSyncTasks?.install();
 }
 
-// Класс SqlDb для работы с базой данных
+// Global object installed by the native module
+const __SyncTasksManager = global.SyncTasksManager;
+
+// Thin typed wrapper over the global SyncTasksManager
 export class SyncTasksManager {
   static instance: ITaskManager | null = __SyncTasksManager;
 
@@ -77,9 +76,21 @@ export class SyncTasksManager {
 export const createTask = <T extends unknown>(
   props: TCreateTaskProps<T>
 ): Task => {
+  const timeout = props.config.timeout ?? DEFAULT_TIMEOUT_MS;
+
+  if (!(timeout > 0) || !Number.isFinite(timeout)) {
+    throw new Error(
+      '[SyncTasksManager]: timeout must be a positive number of ms'
+    );
+  }
+
   const params = {
     ...props,
-    interval: props.config.interval ?? 1000,
+    config: {
+      ...props.config,
+      interval: props.config.interval ?? 1000,
+      timeout,
+    },
   };
 
   return global.createTask<T>(params);

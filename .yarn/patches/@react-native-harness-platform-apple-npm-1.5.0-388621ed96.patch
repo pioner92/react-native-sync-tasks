@@ -1,0 +1,15 @@
+diff --git a/dist/instance.js b/dist/instance.js
+index a3591428fe6ce8c6bb1edff556f2b8d8582c1721..dee83e9fb1cd36a283f86a556a02cf2442677cfb 100644
+--- a/dist/instance.js
++++ b/dist/instance.js
+@@ -158,9 +158,7 @@ export const getApplePhysicalDevicePlatformInstance = async (config, harnessConf
+     assertAppleDevicePhysical(config.device);
+     const devicectl = instrumented(devicectlModule, 'platform.ios.devicectl', init?.diagnostics ?? noopDiagnostics);
+     const permissionsEnabled = harnessConfig.permissions ?? false;
+-    if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
+-        throw new Error(`Custom Metro port ${harnessConfig.metroPort} is not supported on physical iOS devices. Physical devices always connect to port ${DEFAULT_METRO_PORT}.`);
+-    }
++    // Patched: the app gets the Metro address from the -RCT_jsLocation launch argument (rn-harness.config.mjs).
+     const device = await devicectl.getDevice(config.device.name, init?.signal);
+     if (!device) {
+         throw new DeviceNotFoundError(getDeviceName(config.device));

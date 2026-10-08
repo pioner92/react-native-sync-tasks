@@ -9,6 +9,7 @@
 #pragma once
 
 #include "atomic"
+#include "optional"
 #include "jsi/jsi.h"
 #include "queue"
 #include "thread"
@@ -25,8 +26,20 @@ class Task : public jsi::NativeState {
   ~Task() = default;
 
   void run() {
-    if (job_ && ready_ && !stopped_)
-      job_(*this);
+    if (!job_ || !ready_ || stopped_)
+      return;
+
+    // Skip the tick while this task's previous request is still in flight, so a slow
+    // endpoint occupies at most one pool thread instead of starving the other tasks.
+    if (inFlight_.exchange(true))
+      return;
+
+    struct Release {
+      std::atomic<bool>& flag;
+      ~Release() { flag = false; }
+    } release{inFlight_};
+
+    job_(*this);
   }
 
   const std::string& getId() const { return id_; }
@@ -57,7 +70,8 @@ class Task : public jsi::NativeState {
   std::string id_;
   std::function<void(Task& t)> job_;
   std::atomic<bool> stopped_ = true;
-  size_t lastBodyHash_;
+  std::atomic<bool> inFlight_ = false;
+  std::optional<size_t> lastBodyHash_;
   int intervalMs_;
   bool ready_ = false;
 };

@@ -1,74 +1,50 @@
 package com.synctasks
 
-import android.util.Log
+import com.facebook.proguard.annotations.DoNotStrip
 import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.common.annotations.FrameworkAPI
+import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.turbomodule.core.CallInvokerHolderImpl
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import com.facebook.react.turbomodule.core.interfaces.BindingsInstallerHolder
+import com.facebook.react.turbomodule.core.interfaces.TurboModuleWithJSIBindings
 
+@ReactModule(name = SyncTasksModule.NAME)
+class SyncTasksModule(context: ReactApplicationContext) :
+  SyncTasksSpec(context), TurboModuleWithJSIBindings {
 
-object Fetcher {
-  @JvmStatic
-  fun fetch(url: String, headers: Map<String, String>): String {
-    val client = OkHttpClient()
+  // New architecture: the TurboModule manager installs the bindings when the module is created.
+  @DoNotStrip
+  override fun getBindingsInstaller(): BindingsInstallerHolder = nativeCreateBindingsInstaller()
 
-    val builder = Request.Builder()
-      .url(url)
+  @OptIn(FrameworkAPI::class)
+  @ReactMethod(isBlockingSynchronousMethod = true)
+  override fun install(): Boolean {
+    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+      return true
+    }
 
-    headers.forEach { (k, v) -> builder.addHeader(k, v) }
+    @Suppress("DEPRECATION")
+    val callInvokerHolder =
+      reactApplicationContext.catalystInstance.jsCallInvokerHolder as CallInvokerHolderImpl
+    val runtime = reactApplicationContext.javaScriptContextHolder?.get() ?: return false
 
-    val response = client.newCall(builder.build()).execute()
-
-    val body = response.body?.string() ?: ""
-
-    return body;
+    nativeInstall(runtime, callInvokerHolder)
+    return true
   }
-}
-
-@OptIn(FrameworkAPI::class)
-class SyncTasksModule internal constructor(val context: ReactApplicationContext) :
-  ReactContextBaseJavaModule(context) {
 
   companion object {
-
     const val NAME = "SyncTasksManager"
 
     init {
       System.loadLibrary("rnsynctasks")
     }
 
-    lateinit var  instance: SyncTasksModule
-
     @OptIn(FrameworkAPI::class)
     @JvmStatic
     external fun nativeInstall(jsiRuntimePointer: Long, jsCallInvoker: CallInvokerHolderImpl)
-  }
 
-  private val reactContext = context
-
-   init {
-        instance = this
-    }
-
-  override fun getName(): String {
-    return NAME
-  }
-
-  @OptIn(FrameworkAPI::class)
-  @ReactMethod(isBlockingSynchronousMethod = true)
-  fun install(): Boolean {
-    Log.d(NAME, "install() called")
-
-
-    val callInvokerHolder = reactContext.catalystInstance.jsCallInvokerHolder as CallInvokerHolderImpl
-
-    nativeInstall(
-      context.javaScriptContextHolder!!.get(),
-      callInvokerHolder,
-    )
-    return true
+    @JvmStatic
+    external fun nativeCreateBindingsInstaller(): BindingsInstallerHolder
   }
 }

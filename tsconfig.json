@@ -16,7 +16,7 @@
       "DOM"
     ],
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "noImplicitUseStrict": false,
@@ -31,6 +31,7 @@
   "exclude": [
     "example",
     "node_modules",
-    "dist"
+    "dist",
+    "lib"
   ]
 }

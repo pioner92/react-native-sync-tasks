@@ -1,20 +1,22 @@
 #import "SyncTasks.h"
 #import "react-native-sync-tasks.hpp"
 
-#import <React/RCTBridge+Private.h>
-#import <ReactCommon/RCTTurboModule.h>
 #import <React/RCTBridge.h>
-#import <React/RCTUtils.h>
 #import <jsi/jsi.h>
-#include <filesystem>
 
-#include <future>
-#include "iostream"
+#ifdef RCT_NEW_ARCH_ENABLED
+#import <ReactCommon/RCTTurboModule.h>
+#import <ReactCommon/RCTTurboModuleWithJSIBindings.h>
+#else
+#import <React/RCTBridge+Private.h>
+#endif
 
-
-using namespace std;
 using namespace facebook;
 
+#ifdef RCT_NEW_ARCH_ENABLED
+@interface SyncTasksManager () <RCTTurboModule, RCTTurboModuleWithJSIBindings>
+@end
+#endif
 
 @implementation SyncTasksManager
 
@@ -27,6 +29,24 @@ RCT_EXPORT_MODULE(SyncTasksManager)
   return YES;
 }
 
+#ifdef RCT_NEW_ARCH_ENABLED
+
+// The TurboModule manager calls this on the JS thread when the module is first requested.
+- (void)installJSIBindingsWithRuntime:(jsi::Runtime &)runtime
+                          callInvoker:(const std::shared_ptr<react::CallInvoker> &)callInvoker {
+  sh::synctasks::install(&runtime, callInvoker);
+}
+
+- (std::shared_ptr<react::TurboModule>)getTurboModule:(const react::ObjCTurboModule::InitParams &)params {
+  return std::make_shared<react::NativeSyncTasksSpecJSI>(params);
+}
+
+// The bindings are already installed by installJSIBindingsWithRuntime.
+- (NSNumber *)install {
+  return @YES;
+}
+
+#else
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(install)
 {
@@ -43,13 +63,11 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(install)
   }
 
   auto jsCallInvoker =  bridge.jsCallInvoker;
-
-
   sh::synctasks::install(jsiRuntime, jsCallInvoker);
-
 
   return @true;
 }
 
+#endif
 
 @end
